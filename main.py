@@ -1,11 +1,12 @@
 import os
 # import pandas as pd
 # from tabulate import tabulate
+from django.contrib.messages.storage import fallback
 from openpyxl import Workbook, load_workbook
 import configparser
+import operator
 
 config_name = "config.ini"
-
 
 class Record(object):
 
@@ -24,7 +25,7 @@ class Excelfile(object):
     def __init__(self, file_name):
         self.file_name = file_name
         # Creale clear variables
-        self.dictr = {}
+        self.list = []
         # File params
         self.input_file = None
         self.output_file = None
@@ -40,44 +41,34 @@ class Excelfile(object):
         self.read_config()
 
     def read_xls_file(self):
+        dict = {}
+        bufflist =[]
         file_path = '{0}/{1}'.format(os.getcwd(), self.input_file)
         if os.path.exists(file_path):
             wb = load_workbook(filename=file_path)
             ws = wb.active
 
-            # for col in ws.columns:
-            #     pass
-
             for i in range(self.data_start, ws.max_row - self.data_start):
 
-                if self.col_name != None:
-                    name = ws.cell(row=i, column=self.col_name).value
-                else:
-                    name = ws.cell(row=i, column=2).value
+                rec = Record(
+                    ws.cell(row=i, column=self.col_name).value,
+                    ws.cell(row=i, column=self.col_id).value,
+                    ws.cell(row=i, column=self.col_price).value,
+                    ws.cell(row=i, column=self.col_count).value)
 
-                if self.col_id != None:
-                    id = ws.cell(row=i, column=self.col_id).value
-                else:
-                    id = ws.cell(row=i, column=3).value
-
-                if self.col_price != None:
-                    price = ws.cell(row=i, column=self.col_price).value
-                else:
-                    price = ws.cell(row=i, column=5).value
-
-                if self.col_count != None:
-                    count = ws.cell(row=i, column=self.col_count).value
-                else:
-                    count = ws.cell(row=i, column=6).value
-
-                rec = Record(name, id, price, count)
-
-                rec2 = self.dictr.get(rec.record_id())
+                rec2 = dict.get(rec.record_id())
                 if rec2 != None:
                     rec.count += rec2.count
-                    self.dictr.pop(rec2.record_id())
+                    dict.pop(rec2.record_id())
 
-                self.dictr[rec.record_id()] = rec
+                dict[rec.record_id()] = rec
+
+            for value in dict.values():
+                bufflist.append(value)
+
+            self.list = sorted(bufflist, key=operator.itemgetter(0))
+
+
 
     def write_xls_file(self):
         file_path = '{0}/{1}'.format(os.getcwd(), self.output_file)
@@ -85,36 +76,13 @@ class Excelfile(object):
         sheet = book.active
 
         i = self.data_start
-        for item in self.dictr.values():
-            if self.col_name != None:
-                sheet.cell(row=i, column=self.col_name).value = item.name
-            else:
-                sheet.cell(row=i, column=2).value = item.name
-
-            if self.col_id != None:
-                sheet.cell(row=i, column=self.col_id).value = item.id
-            else:
-                sheet.cell(row=i, column=3).value = item.id
-
-            if self.col_measure != None:
-                sheet.cell(row=i, column=self.col_measure).value = u'шт.'
-            else:
-                sheet.cell(row=i, column=4).value = u'шт.'
-
-            if self.col_price != None:
-                sheet.cell(row=i, column=self.col_price).value = item.price
-            else:
-                sheet.cell(row=i, column=5).value = item.price
-
-            if self.col_count != None:
-                sheet.cell(row=i, column=self.col_count).value = item.price
-            else:
-                sheet.cell(row=i, column=6).value = item.price
-
-            if self.col_measure != None:
-                sheet.cell(row=i, column=self.col_measure).value = item.count * item.price
-            else:
-                sheet.cell(row=i, column=7).value = item.count * item.price
+        for item in self.list.values():
+            sheet.cell(row=i, column=self.col_name).value = item.name
+            sheet.cell(row=i, column=self.col_id).value = item.id
+            sheet.cell(row=i, column=self.col_measure).value = u'шт.'
+            sheet.cell(row=i, column=self.col_price).value = item.price
+            sheet.cell(row=i, column=self.col_count).value = item.price
+            sheet.cell(row=i, column=self.col_measure).value = item.count * item.price
 
             i += 1
 
@@ -124,17 +92,17 @@ class Excelfile(object):
         if self.file_name.strip() != '':
             conf = configparser.ConfigParser()
             conf.read(self.file_name.strip())
-            self.input_file = conf['FILE']['InputFileName']
-            self.output_file = conf['FILE']['OutputFileName']
+            self.input_file = conf.get('FILE', 'InputFileName', fallback='input.xls')
+            self.output_file = conf('FILE', 'OutputFileName', fallback='output.xls')
             # Start from 0, then title_height + 1
-            self.data_start = int(conf['FILE']['HeaderRowCount']) + 1
-
-            self.col_name = int(conf['ROWS']['ColName'])
-            self.col_id = int(conf['ROWS']['ColId'])
-            self.col_measure = int(conf['ROWS']['ColMeasure'])
-            self.col_price = int(conf['ROWS']['ColPrice'])
-            self.col_count = int(conf['ROWS']['ColCount'])
-            self.col_total = int(conf['ROWS']['ColTotal'])
+            self.data_start = conf.get('FILE', 'HeaderRowCount', fallback=1) + 1
+            #Read row params file
+            self.col_name = conf.get('ROWS', 'ColName', fallback=2)
+            self.col_id = conf.get('ROWS', 'ColId', fallback=3)
+            self.col_measure = conf.get('ROWS', 'ColMeasure', fallback=4)
+            self.col_price = conf.get('ROWS', 'ColPrice', fallback=5)
+            self.col_count = conf.get('ROWS', 'ColCount', fallback=6)
+            self.col_total = conf.get('ROWS', 'ColTotal', fallback=7)
 
 
 if __name__ == "__main__":
