@@ -1,12 +1,11 @@
 import os
-# import pandas as pd
-# from tabulate import tabulate
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 import configparser
+import string
 from operator import attrgetter
-from shutil import copyfile
 
 config_name = "config.ini"
+
 
 class Record(object):
 
@@ -46,7 +45,6 @@ class Excelfile(object):
 
     def read_xls_file(self):
         dict = {}
-        bufflist =[]
         file_path = '{0}/{1}'.format(os.getcwd(), self.input_file)
         if os.path.exists(file_path):
             wb = load_workbook(filename=file_path)
@@ -54,8 +52,11 @@ class Excelfile(object):
 
             for i in range(self.data_start, ws.max_row - self.data_start):
 
+                name = ws.cell(row=i, column=self.col_name).value
+                if name == None:
+                    name = ''
                 rec = Record(
-                    ws.cell(row=i, column=self.col_name).value,
+                    name,
                     ws.cell(row=i, column=self.col_id).value,
                     ws.cell(row=i, column=self.col_price).value,
                     ws.cell(row=i, column=self.col_count).value)
@@ -70,7 +71,7 @@ class Excelfile(object):
             for value in dict.values():
                 self.list.append(value)
 
-            # self.list.sort(key=attrgetter('name'))
+            self.list.sort(key=attrgetter('name'))
 
     def write_xls_file(self):
         self.prepare_file_for_write()
@@ -80,13 +81,13 @@ class Excelfile(object):
             ws = wb.active
 
             i = self.data_start
-            for item in self.list.values():
+            for item in self.list:
                 ws.cell(row=i, column=self.col_name).value = item.name
                 ws.cell(row=i, column=self.col_id).value = item.id
                 ws.cell(row=i, column=self.col_measure).value = u'шт.'
                 ws.cell(row=i, column=self.col_price).value = item.price
-                ws.cell(row=i, column=self.col_count).value = item.price
-                ws.cell(row=i, column=self.col_measure).value = item.count * item.price
+                ws.cell(row=i, column=self.col_count).value = item.count
+                ws.cell(row=i, column=self.col_total).value = item.count * item.price
 
                 i += 1
 
@@ -100,7 +101,7 @@ class Excelfile(object):
             self.output_file = conf.get('FILE', 'OutputFileName', fallback='output.xls')
             # Start from 0, then title_height + 1
             self.data_start = int(conf.get('FILE', 'HeaderRowCount', fallback='1')) + 1
-            #Read row params file
+            # Read row params file
             self.col_name = int(conf.get('ROWS', 'ColName', fallback='2'))
             self.col_id = int(conf.get('ROWS', 'ColId', fallback='3'))
             self.col_measure = int(conf.get('ROWS', 'ColMeasure', fallback='4'))
@@ -110,20 +111,19 @@ class Excelfile(object):
 
     def prepare_file_for_write(self):
         # Copy file to destination path
-        copyfile('{0}/{1}'.format(os.getcwd(), self.input_file), '{0}/{1}'.format(os.getcwd(), self.output_file))
         # Remove all rows except the title
-        if os.path.exists('{0}/{1}'.format(os.getcwd(), self.output_file)):
-            wb = load_workbook(filename='{0}/{1}'.format(os.getcwd(), self.output_file))
+        if os.path.exists('{0}/{1}'.format(os.getcwd(), self.input_file)):
+            wb = load_workbook(filename='{0}/{1}'.format(os.getcwd(), self.input_file))
             ws = wb.active
 
-            for rows in range(self.data_start, ws.max_row - self.data_start):
-                if rows[1] == 'None':
-                    rows[0].value == None
-                    rows[1].value == None
-                else:
-                    rows[0].value = rows[0].value + "," + rows[1].value.replace("-", "")
-                    rows[1].value = None
+            row = '{0}{1}'.format(string.ascii_uppercase[0], self.data_start)
+            col = '{0}{1}'.format(string.ascii_uppercase[ws.max_column], ws.max_row)
 
+            for rows in ws[row:col]:
+                for i in range(0, ws.max_column):
+                    rows[i].value = None
+
+        wb.save('{0}/{1}'.format(os.getcwd(), self.output_file))
 
 
 if __name__ == "__main__":
